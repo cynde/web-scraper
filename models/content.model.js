@@ -18,10 +18,8 @@ const contentSchema = new Schema({
     content: String,
     date: Date, 
     checksum: String
-}
-);
-
+});
 
 const Content = model('Content', contentSchema);
 
-module.exports = { Content, contentSchema}; 
+module.exports = { Content, contentSchema }; 

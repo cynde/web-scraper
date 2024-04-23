@@ -40,13 +40,9 @@ Example of Link to be scraped https://www.ird.gov.hk/eng/ppr/advance13.htm
 
 */
 
-
-
-( async ()=> {
-	
-
+const scrape = async () => {
 	await db.mongoose.connect(db.url); 
+	console.log('Database connected');	
+};
 
-
-})(); 
-
+scrape();
