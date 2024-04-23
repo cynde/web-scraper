@@ -2,7 +2,7 @@
 const { Schema, model } = require('mongoose');
 
 const jobSchema = new Schema({
-	website:{ type: Schema.Types.ObjectId, ref: 'Website' },
+	website: { type: Schema.Types.ObjectId, ref: 'Website' },
 	startTime: { type: Date, default: Date.now }, 
 	endTime: Date, 
 	status: {

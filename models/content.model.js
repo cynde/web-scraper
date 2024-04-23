@@ -1,7 +1,7 @@
 const { Schema, model } = require('mongoose');
 
 const contentSchema = new Schema({
-    url:String, 
+    url: String, 
     refNo: String, 
     title: String, 
 	contentType: String, 

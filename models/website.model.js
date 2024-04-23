@@ -6,7 +6,7 @@ const websiteSchema = new Schema({
 		type: String,
 		unique: true
 	},
-	url:String,
+	url: String,
 	description: String,  
 	jobs: [{ type: Schema.Types.ObjectId, ref: 'Job' }],
 	content: [{ type: Schema.Types.ObjectId, ref: 'Content' }]
