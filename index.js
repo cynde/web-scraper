@@ -68,7 +68,7 @@ const createWebsite = async (name, url, description) => {
 	return website || await services.website.create({ name, url, description });
 };
 
-const scrapeLinks = async (currentJobId, website, parentContentId, links) => {
+const scrapeLinks = async (currentJobId, website, parentContentId, domain, links) => {
 	let index = 0;
 	for (const link of links) {
 		try {
@@ -78,9 +78,9 @@ const scrapeLinks = async (currentJobId, website, parentContentId, links) => {
 			}
 			await services.job.updateProgressById(currentJobId, newProgress);
 			
-			const modifiedLink = `https://www.ird.gov.hk${link}`;
-			const { _id: contentId, title } = await createContent(modifiedLink, website, parentContentId);
-			const page = { url: modifiedLink, title, content: contentId };
+			const fullLink = `${domain}${link}`;
+			const { _id: contentId, title } = await createContent(fullLink, website, parentContentId);
+			const page = { url: fullLink, title, content: contentId };
 			await services.job.addScrapedPage(currentJobId, new Page(page));
 			index += 1;
 		} catch (error) {
@@ -105,10 +105,9 @@ const scrapeWebsite = async (name, url, description) => {
 	const { _id: currentJobId } = await services.job.create(jobObject);
 
 	try {
-		const { _id: parentContentId, title } = await createContent(url, website);
-		const parentDocumentPage = { url, title, content: parentContentId };
-		await services.job.addScrapedPage(currentJobId, new Page(parentDocumentPage));
-		await scrapeLinks(currentJobId, website, parentContentId, links)
+		const { _id: parentContentId } = await createContent(url, website);
+		const domain = url.split('https://')[1].split('/')[0];
+		await scrapeLinks(currentJobId, website, parentContentId, domain, links)
 	} catch (error) {
 		console.error(`Error scrapping the website: ${error.toString()}`);
 		await services.job.updateStatusById(currentJobId, 'error');
