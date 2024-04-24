@@ -61,11 +61,11 @@ const createContent = async (url, website, parentDocument = null) => {
 };
 
 const createWebsite = async (name, url, description) => {
-	let website = await services.website.findOneByUrl(url);
+	const website = await services.website.findOneByUrl(url);
 	return website || await services.website.create({ name, url, description });
 };
 
-const scrapeLinks = async (links) => {
+const scrapeLinks = async (currentJobId, website, parentDocument, links) => {
 	await Promise.all(links.map(async (link, index) => {
 		try {
 			const newProgress = {
@@ -84,24 +84,26 @@ const scrapeLinks = async (links) => {
 };
  
 const scrapeWebsite = async (name, url, description) => {
+	const website = await createWebsite(name, url, description);
+	const { data } = await axios.get(url);
+	const { window: { document } } = new JSDOM(data);
+
+	const links = getLinks(document);
+	const jobObject = {
+		website,
+		links,
+		progress: {
+			phase: 'pages'
+		}
+	};
+	const { _id: currentJobId } = await services.job.create(jobObject);
+
 	try {
-		const website = await createWebsite(name, url, description);
-
-		const links = getLinks(document);
-		const jobObject = {
-			website,
-			links,
-			progress: {
-				phase: 'pages'
-			}
-		};
-		const { _id: currentJobId } = await services.job.create(jobObject);
-
-		const { _id: contentId, title } = await createContent(url, website);
-		const parentDocumentPage = { url, title, content: contentId };
+		const { _id: parentContentId, title } = await createContent(url, website);
+		const parentDocumentPage = { url, title, content: parentContentId };
 		await services.job.addScrapedPage(currentJobId, new Page(parentDocumentPage));
 
-		await scrapeLinks(links);
+		await scrapeLinks(currentJobId, website, parentContentId, links);
 
 		await services.job.updateStatusById(currentJobId, 'finished');
 	} catch (error) {

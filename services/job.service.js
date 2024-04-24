@@ -24,7 +24,7 @@ class JobService {
     };
 
     static updateEndTimeById = async (id) => {
-        await jobModel.updateOne({ _id: id }, { $set: { endTime: Date.now } });
+        await jobModel.updateOne({ _id: id }, { $set: { endTime: new Date() } });
     };
 }
 
