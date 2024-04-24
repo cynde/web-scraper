@@ -18,7 +18,7 @@ const contentSchema = new Schema({
     content: String,
     date: Date, 
     checksum: String
-});
+}, { timestamps: { createdAt: 'createdAt' } });
 
 const Content = model('Content', contentSchema);
 

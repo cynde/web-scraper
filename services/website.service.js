@@ -1,12 +1,12 @@
-const { website } = require('../models');
+const { website: websiteModel } = require('../models');
 
 class WebsiteService {
-    static create = async (name, url, description) => {
-        return await website.create({ name, url, description });
+    static create = async (website) => {
+        return await websiteModel.create(website);
     };
 
     static findOneByUrl = async (url) => {
-        return await website.findOne({ url });
+        return await websiteModel.findOne({ url });
     }
 }
 

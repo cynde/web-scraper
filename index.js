@@ -4,6 +4,7 @@ const axios = require('axios');
 const { JSDOM } = require('jsdom');
 const db = require('./models');
 const services = require('./services');
+const Page = require('./classes/page.class');
 
 /*
 
@@ -54,6 +55,23 @@ const parseMetadata = (document) => {
 	return metadata;
 };
 
+const extractLinks = (document) => {
+	const links = [];
+	const tables = document.querySelectorAll('table');
+	tables.forEach((table) => {
+		const tableBody = table.querySelector('tbody');
+		const rows = tableBody.querySelectorAll('tr');
+		rows.forEach((row) => {
+			const anchor = row.querySelector('a');
+			if (anchor && anchor.getAttribute('href').startsWith('/eng/ppr/')) {
+			  	links.push(anchor.getAttribute('href'));
+			}
+		});
+	});
+
+	return links;
+};
+
 const getDate = (document) => {
 	const dateElement = document.getElementById('lastUpdatedDate');
 	if (dateElement) {
@@ -61,7 +79,7 @@ const getDate = (document) => {
 		const date = new Date(textContent);
 		return date;
 	} else {
-		console.log('Date element in the website content not found');
+		console.error('Date element in the website content not found');
 		return null;
 	}
 };
@@ -70,17 +88,15 @@ const calculateChecksum = (content) => {
 	return crypto.createHash('md5').update(content).digest('hex');
 };
 
-const scrapeContent = async (url, website, parentDocument = null) => {
+const scrapeContent = async (url, document, website, parentDocument = null) => {
 	try {
-		const { data } = await axios.get(url);
-		const { window: { document } } = new JSDOM(data);
 		const title = document.title;
 		const documentType = 'html';
 		const metadata = parseMetadata(document);
 		const content = document.body.textContent.trim();
 		const date = getDate(document);
 		const checksum = calculateChecksum(content);
-		return services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
+		return await services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
 	} catch (error) {
 		throw error;
 	}
@@ -90,12 +106,59 @@ const scrapeWebsite = async (name, url, description) => {
 	try {
 		let website = await services.website.findOneByUrl(url);
 		if (!website) {
-			website = services.website.create(name, url, description);
+			website = await services.website.create({ name, url, description });
 		}
 
-		const parentDocument = await scrapeContent(url, website);
+		const links = extractLinks(document);
+		const jobObject = {
+			website,
+			links,
+			progress: {
+				phase: 'pages'
+			}
+		};
+		const currentJob = await services.job.create(jobObject);
+
+		const { data } = await axios.get(url);
+		const { window: { document } } = new JSDOM(data);
+		const parentDocument = await scrapeContent(url, document, website);
+		const parentDocumentPage = {
+			url: parentDocument.link,
+			title: parentDocument.title,
+			content: parentDocument._id
+		};
+		await services.job.addScrapedPage(currentJob._id, new Page(parentDocumentPage));
+
+		await Promise.all(links.map(async (link, index) => {
+			try {
+				const newProgress = {
+					phase: 'links',
+					current: `${index + 1} / ${links.length}`
+				}
+				await services.job.updateProgressById(currentJob._id, newProgress);
+
+				const { data } = await axios.get(link);
+				const { window: { document } } = new JSDOM(data);
+				const scrapedContent = await scrapeContent(link, document, website, parentDocument);
+				const page = {
+					url: scrapedContent.link,
+					title: scrapedContent.title,
+					content: scrapedContent._id,
+				};
+				await services.job.addScrapedPage(currentJob._id, new Page(page));
+			} catch (error) {
+				console.error(`Error scrapping the website: ${error.toString()}`);
+				await services.job.updateStatusById(currentJob._id, 'error');
+				const newError = {
+					code: error.code || 'unknown', message: error.message
+				};
+				await services.job.updateErrorById(currentJob._id, newError);
+			}
+		}));
+		await services.job.updateStatusById(currentJob._id, 'finished');
+		await services.job.updateEndTimeById(currentJob._id);
 	} catch (error) {
-		console.log(`Error scrapping the website: ${error.toString()}`);
+		console.error(`Error scrapping the website: ${error.toString()}`);
 	}
 };
 
