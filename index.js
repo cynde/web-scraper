@@ -1,10 +1,10 @@
 const crypto = require('crypto'); 
-const util = require('util'); 
 const axios = require('axios');
 const { JSDOM } = require('jsdom');
 const db = require('./models');
 const services = require('./services');
 const Page = require('./classes/page.class');
+const { getLinks, getMetadata, getDocumentDate } = require('./utils/htmlParser');
 
 /*
 
@@ -39,77 +39,55 @@ Example of Link to be scraped https://www.ird.gov.hk/eng/ppr/advance13.htm
 
 */
 
-const parseMetadata = (document) => {
-	const metaTags = document.head.getElementsByTagName('meta');
-	const metadata = [];
-		
-	for (const metaTag of metaTags) {
-		const name = metaTag.getAttribute('name');
-		const content = metaTag.getAttribute('content');
-	  
-		if (name) {
-			metadata.push({ name, content });
-		}
-	}
-
-	return metadata;
-};
-
-const extractLinks = (document) => {
-	const links = [];
-	const tables = document.querySelectorAll('table');
-	tables.forEach((table) => {
-		const tableBody = table.querySelector('tbody');
-		const rows = tableBody.querySelectorAll('tr');
-		rows.forEach((row) => {
-			const anchor = row.querySelector('a');
-			if (anchor && anchor.getAttribute('href').startsWith('/eng/ppr/')) {
-			  	links.push(anchor.getAttribute('href'));
-			}
-		});
-	});
-
-	return links;
-};
-
-const getDate = (document) => {
-	const dateElement = document.getElementById('lastUpdatedDate');
-	if (dateElement) {
-		const textContent = dateElement.value.split(' ')[0].split('-');
-		const date = new Date(textContent);
-		return date;
-	} else {
-		console.error('Date element in the website content not found');
-		return null;
-	}
-};
-
 const calculateChecksum = (content) => {
 	return crypto.createHash('md5').update(content).digest('hex');
 };
 
-const scrapeContent = async (url, document, website, parentDocument = null) => {
+const createContent = async (url, website, parentDocument = null) => {
 	try {
-		const title = document.title;
+		const { data } = await axios.get(url);
+		const { window: { document } } = new JSDOM(data);
+		const { title } = document;
+
 		const documentType = 'html';
-		const metadata = parseMetadata(document);
+		const metadata = getMetadata(document);
 		const content = document.body.textContent.trim();
-		const date = getDate(document);
+		const date = getDocumentDate(document);
 		const checksum = calculateChecksum(content);
 		return await services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
 	} catch (error) {
 		throw error;
 	}
 };
+
+const createWebsite = async (name, url, description) => {
+	let website = await services.website.findOneByUrl(url);
+	return website || await services.website.create({ name, url, description });
+};
+
+const scrapeLinks = async (links) => {
+	await Promise.all(links.map(async (link, index) => {
+		try {
+			const newProgress = {
+				phase: 'links',
+				current: `${index + 1} / ${links.length}`
+			}
+			await services.job.updateProgressById(currentJobId, newProgress);
+
+			const { _id: contentId, title } = await createContent(link, website, parentDocument);
+			const page = { url: link, title, content: contentId };
+			await services.job.addScrapedPage(currentJobId, new Page(page));
+		} catch (error) {
+			throw error;
+		}
+	}));
+};
  
 const scrapeWebsite = async (name, url, description) => {
 	try {
-		let website = await services.website.findOneByUrl(url);
-		if (!website) {
-			website = await services.website.create({ name, url, description });
-		}
+		const website = await createWebsite(name, url, description);
 
-		const links = extractLinks(document);
+		const links = getLinks(document);
 		const jobObject = {
 			website,
 			links,
@@ -117,48 +95,24 @@ const scrapeWebsite = async (name, url, description) => {
 				phase: 'pages'
 			}
 		};
-		const currentJob = await services.job.create(jobObject);
+		const { _id: currentJobId } = await services.job.create(jobObject);
 
-		const { data } = await axios.get(url);
-		const { window: { document } } = new JSDOM(data);
-		const parentDocument = await scrapeContent(url, document, website);
-		const parentDocumentPage = {
-			url: parentDocument.link,
-			title: parentDocument.title,
-			content: parentDocument._id
-		};
-		await services.job.addScrapedPage(currentJob._id, new Page(parentDocumentPage));
+		const { _id: contentId, title } = await createContent(url, website);
+		const parentDocumentPage = { url, title, content: contentId };
+		await services.job.addScrapedPage(currentJobId, new Page(parentDocumentPage));
 
-		await Promise.all(links.map(async (link, index) => {
-			try {
-				const newProgress = {
-					phase: 'links',
-					current: `${index + 1} / ${links.length}`
-				}
-				await services.job.updateProgressById(currentJob._id, newProgress);
+		await scrapeLinks(links);
 
-				const { data } = await axios.get(link);
-				const { window: { document } } = new JSDOM(data);
-				const scrapedContent = await scrapeContent(link, document, website, parentDocument);
-				const page = {
-					url: scrapedContent.link,
-					title: scrapedContent.title,
-					content: scrapedContent._id,
-				};
-				await services.job.addScrapedPage(currentJob._id, new Page(page));
-			} catch (error) {
-				console.error(`Error scrapping the website: ${error.toString()}`);
-				await services.job.updateStatusById(currentJob._id, 'error');
-				const newError = {
-					code: error.code || 'unknown', message: error.message
-				};
-				await services.job.updateErrorById(currentJob._id, newError);
-			}
-		}));
-		await services.job.updateStatusById(currentJob._id, 'finished');
-		await services.job.updateEndTimeById(currentJob._id);
+		await services.job.updateStatusById(currentJobId, 'finished');
 	} catch (error) {
 		console.error(`Error scrapping the website: ${error.toString()}`);
+		await services.job.updateStatusById(currentJobId, 'error');
+		const newError = {
+			code: error.code || 'unknown', message: error.message
+		};
+		await services.job.updateErrorById(currentJobId, newError);
+	} finally {
+		await services.job.updateEndTimeById(currentJobId);
 	}
 };
 
