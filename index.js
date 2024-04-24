@@ -54,7 +54,10 @@ const createContent = async (url, website, parentDocument = null) => {
 		const content = document.body.textContent.trim();
 		const date = getDocumentDate(document);
 		const checksum = calculateChecksum(content);
-		return await services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
+		const createdContent = await services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
+		await services.website.addContentById(website._id, createdContent._id);
+
+		return createContent;
 	} catch (error) {
 		throw error;
 	}
@@ -117,6 +120,7 @@ const scrapeWebsite = async (name, url, description) => {
 
 	await services.job.updateStatusById(currentJobId, 'finished');
 	await services.job.updateEndTimeById(currentJobId);
+	await services.website.addJobById(website._id, currentJobId);
 };
 
 const init = async () => {
