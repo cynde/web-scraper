@@ -1,11 +1,9 @@
-const Page = require("./classes/page.class"); 
 const crypto = require('crypto'); 
-const db = require("./models");
-const Website = db.website;
-const Job = db.job; 
-const Content = db.content; 
 const util = require('util'); 
-
+const axios = require('axios');
+const { JSDOM } = require('jsdom');
+const db = require('./models');
+const services = require('./services');
 
 /*
 
@@ -40,9 +38,81 @@ Example of Link to be scraped https://www.ird.gov.hk/eng/ppr/advance13.htm
 
 */
 
-const scrape = async () => {
-	await db.mongoose.connect(db.url); 
-	console.log('Database connected');	
+const parseMetadata = (document) => {
+	const metaTags = document.head.getElementsByTagName('meta');
+	const metadata = [];
+		
+	for (const metaTag of metaTags) {
+		const name = metaTag.getAttribute('name');
+		const content = metaTag.getAttribute('content');
+	  
+		if (name) {
+			metadata.push({ name, content });
+		}
+	}
+
+	return metadata;
 };
 
-scrape();
+const getDate = (document) => {
+	const dateElement = document.getElementById('lastUpdatedDate');
+	if (dateElement) {
+		const textContent = dateElement.value.split(' ')[0].split('-');
+		const date = new Date(textContent);
+		return date;
+	} else {
+		console.log('Date element in the website content not found');
+		return null;
+	}
+};
+
+const calculateChecksum = (content) => {
+	return crypto.createHash('md5').update(content).digest('hex');
+};
+
+const scrapeContent = async (url, website, parentDocument = null) => {
+	try {
+		const { data } = await axios.get(url);
+		const { window: { document } } = new JSDOM(data);
+		const title = document.title;
+		const documentType = 'html';
+		const metadata = parseMetadata(document);
+		const content = document.body.textContent.trim();
+		const date = getDate(document);
+		const checksum = calculateChecksum(content);
+		return services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
+	} catch (error) {
+		throw error;
+	}
+};
+ 
+const scrapeWebsite = async (name, url, description) => {
+	try {
+		let website = await services.website.findOneByUrl(url);
+		if (!website) {
+			website = services.website.create(name, url, description);
+		}
+
+		const parentDocument = await scrapeContent(url, website);
+	} catch (error) {
+		console.log(`Error scrapping the website: ${error.toString()}`);
+	}
+};
+
+const init = async () => {
+	await db.mongoose.connect(db.url); 
+	console.log('Database connected');
+
+	if (process.argv.length < 5) {
+		db.mongoose.connection.close();
+		return console.log('Error: Website name, url, and description must be provided in the arguments');
+	}
+
+	const name = process.argv[2];
+	const url = process.argv[3]
+	const description = process.argv[4]
+	await scrapeWebsite(name, url, description);
+	db.mongoose.connection.close();
+};
+
+init();
