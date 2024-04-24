@@ -1,9 +1,9 @@
-const { Job } = require('./models');
+const { job: jobModel } = require('../models');
 
-const create = async (job) => {
-    return await Job.create(job);
-};
-
-module.exports = {
-    create
+class JobService {
+    static create = async (job) => {
+        return await jobModel.create(job);
+    };
 }
+
+module.exports = JobService;

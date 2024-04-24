@@ -1,9 +1,9 @@
-const { Content } = require('./models');
+const { content: contentModel } = require('../models');
 
-const create = async (content) => {
-    return await Content.create(content);
-};
-
-module.exports = {
-    create
+class ContentService {
+    static create = async (content) => {
+        return await contentModel.create(content);
+    };
 }
+
+module.exports = ContentService;

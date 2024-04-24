@@ -1,9 +1,13 @@
-const { Website } = require('./models');
+const { website } = require('../models');
 
-const create = async (website) => {
-    return await Website.create(website);
-};
+class WebsiteService {
+    static create = async (name, url, description) => {
+        return await website.create({ name, url, description });
+    };
 
-module.exports = {
-    create
+    static findOneByUrl = async (url) => {
+        return await website.findOne({ url });
+    }
 }
+
+module.exports = WebsiteService;
