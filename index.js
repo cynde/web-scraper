@@ -48,7 +48,7 @@ const createContent = async (url, website, parentDocument = null) => {
 		const { data } = await axios.get(url);
 		const { window: { document } } = new JSDOM(data);
 		const { title } = document;
-
+		
 		const documentType = 'html';
 		const metadata = getMetadata(document);
 		const content = document.body.textContent.trim();
@@ -65,22 +65,25 @@ const createWebsite = async (name, url, description) => {
 	return website || await services.website.create({ name, url, description });
 };
 
-const scrapeLinks = async (currentJobId, website, parentDocument, links) => {
-	await Promise.all(links.map(async (link, index) => {
+const scrapeLinks = async (currentJobId, website, parentContentId, links) => {
+	let index = 0;
+	for (const link of links) {
 		try {
 			const newProgress = {
 				phase: 'links',
 				current: `${index + 1} / ${links.length}`
 			}
 			await services.job.updateProgressById(currentJobId, newProgress);
-
-			const { _id: contentId, title } = await createContent(link, website, parentDocument);
-			const page = { url: link, title, content: contentId };
+			
+			const modifiedLink = `https://www.ird.gov.hk${link}`;
+			const { _id: contentId, title } = await createContent(modifiedLink, website, parentContentId);
+			const page = { url: modifiedLink, title, content: contentId };
 			await services.job.addScrapedPage(currentJobId, new Page(page));
+			index += 1;
 		} catch (error) {
 			throw error;
 		}
-	}));
+	}
 };
  
 const scrapeWebsite = async (name, url, description) => {
@@ -102,10 +105,7 @@ const scrapeWebsite = async (name, url, description) => {
 		const { _id: parentContentId, title } = await createContent(url, website);
 		const parentDocumentPage = { url, title, content: parentContentId };
 		await services.job.addScrapedPage(currentJobId, new Page(parentDocumentPage));
-
-		await scrapeLinks(currentJobId, website, parentContentId, links);
-
-		await services.job.updateStatusById(currentJobId, 'finished');
+		await scrapeLinks(currentJobId, website, parentContentId, links)
 	} catch (error) {
 		console.error(`Error scrapping the website: ${error.toString()}`);
 		await services.job.updateStatusById(currentJobId, 'error');
@@ -113,9 +113,10 @@ const scrapeWebsite = async (name, url, description) => {
 			code: error.code || 'unknown', message: error.message
 		};
 		await services.job.updateErrorById(currentJobId, newError);
-	} finally {
-		await services.job.updateEndTimeById(currentJobId);
 	}
+
+	await services.job.updateStatusById(currentJobId, 'finished');
+	await services.job.updateEndTimeById(currentJobId);
 };
 
 const init = async () => {
