@@ -4,7 +4,7 @@ const { JSDOM } = require('jsdom');
 const db = require('./models');
 const services = require('./services');
 const Page = require('./classes/page.class');
-const { getLinks, getMetadata, getDocumentDate } = require('./utils/htmlParser');
+const { getLinks, getMetadata, getDocumentDate, getDesiredContent } = require('./utils/htmlParser');
 
 /*
 
@@ -51,13 +51,13 @@ const createContent = async (url, website, parentDocument = null) => {
 		
 		const documentType = 'html';
 		const metadata = getMetadata(document);
-		const content = document.body.textContent.trim();
+		const content = getDesiredContent(document, parentDocument);
 		const date = getDocumentDate(document);
 		const checksum = calculateChecksum(content);
 		const createdContent = await services.content.create({ url, title, documentType, parentDocument, metadata, website, content, date, checksum });
 		await services.website.addContentById(website._id, createdContent._id);
 
-		return createContent;
+		return createdContent;
 	} catch (error) {
 		throw error;
 	}
@@ -73,7 +73,7 @@ const scrapeLinks = async (currentJobId, website, parentContentId, links) => {
 	for (const link of links) {
 		try {
 			const newProgress = {
-				phase: 'links',
+				phase: 'pages',
 				current: `${index + 1} / ${links.length}`
 			}
 			await services.job.updateProgressById(currentJobId, newProgress);
@@ -99,7 +99,7 @@ const scrapeWebsite = async (name, url, description) => {
 		website,
 		links,
 		progress: {
-			phase: 'pages'
+			phase: 'links'
 		}
 	};
 	const { _id: currentJobId } = await services.job.create(jobObject);

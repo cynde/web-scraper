@@ -43,8 +43,26 @@ const getLinks = (document) => {
 	return links;
 };
 
+const getDesiredContent = (document, parentDocument) => {
+	if (parentDocument) {
+		return document.getElementById('content').textContent.trim();
+	}
+	const content = [];
+	const titleElements = document.querySelectorAll('.faq_title div:nth-child(2)');
+	const tableElements = document.querySelectorAll('.hid_div table tbody');
+	titleElements.forEach((titleElement, index) => {
+		const item = {
+			title: titleElement.textContent.trim(),
+			table: tableElements[index].textContent.trim()
+		};
+		content.push(item);
+	});
+	return JSON.stringify(content);
+};
+
 module.exports = {
     getMetadata,
     getDocumentDate,
-    getLinks
+    getLinks,
+	getDesiredContent
 }
