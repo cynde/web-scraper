@@ -7,8 +7,8 @@ const jobSchema = new Schema({
 	endTime: Date, 
 	status: {
 		type : String,
-		enum : ["ongoing", "stopped", "finished", "error"],
-		default: "ongoing"
+		enum : ['ongoing', 'stopped', 'finished', 'error'],
+		default: 'ongoing'
 	},
 	error: {
 		code: String,
@@ -21,8 +21,8 @@ const jobSchema = new Schema({
 	progress : {
 		phase: {
 			type: String, 
-			enum : ["links", "pages"],
-			default: "links"
+			enum : ['links', 'pages'],
+			default: 'links'
 		},
 		current: {
 			type: Schema.Types.Mixed,
