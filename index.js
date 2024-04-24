@@ -78,7 +78,7 @@ const scrapeLinks = async (currentJobId, website, parentContentId, domain, links
 			}
 			await services.job.updateProgressById(currentJobId, newProgress);
 			
-			const fullLink = `${domain}${link}`;
+			const fullLink = `https://${domain}${link}`;
 			const { _id: contentId, title } = await createContent(fullLink, website, parentContentId);
 			const page = { url: fullLink, title, content: contentId };
 			await services.job.addScrapedPage(currentJobId, new Page(page));
